@@ -1,45 +1,21 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"math"
 	"math/rand"
+	"os"
+	"runtime/pprof"
 )
 
-func Fibonacci(startIndex uint64, count uint64) []float64 {
-	var results []float64
+var FibonacciSequence = [64]float64{0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1597, 2584, 4181, 6765, 10946, 17711, 28657, 46368, 75025, 121393, 196418, 317811, 514229, 832040, 1346269, 2178309, 3524578, 5702887, 9227465, 14930352, 24157817, 39088169, 63245986, 102334155, 165580141, 267914296, 433494437, 701408733, 1134903170, 1836311903, 2971215073, 4807526976, 7778742049, 12586269025, 20365011074, 32951280099, 53316291173, 86267571272, 139583862445, 225851433717, 365435296162, 591286729879, 956722026041, 1548008755920, 2504730781961, 4052739537881, 6557470319842}
 
-	var next uint64
-	var current uint64 = 1
-	var previous uint64 = 0
-
-	for i := range startIndex + count {
-		if i >= startIndex {
-			results = append(results, float64(previous))
-		}
-
-		next = current + previous
-		previous = current
-		current = next
-	}
-
-	return results
-}
-
-func GenerateFibonacciSequences(rng *rand.Rand, count uint64, dim uint64) [][]float64 {
-	results := make([][]float64, count)
-
-	for i := range count {
-		results[i] = Fibonacci(uint64(rng.Intn(4)), dim)
-	}
-
-	return results
-}
-
-type SequenceType uint64
+type SequenceType float64
 
 const (
 	SequenceTypeFibonacci SequenceType = 1
-	SequenceTypeOther     SequenceType = 0
+	SequenceTypeOther     SequenceType = -1
 )
 
 type Sequence struct {
@@ -47,23 +23,35 @@ type Sequence struct {
 	Type   SequenceType
 }
 
-func GenerateFibonacciClassification(rng *rand.Rand, count uint64, dim uint64) []Sequence {
-	sequences := make([]Sequence, count)
-
+func GenerateFibonacciClassification(rng *rand.Rand, sequenceSize uint8, sequencesCount uint64) ([]Sequence, error) {
 	if rng == nil {
 		rng = rand.New(rand.NewSource(42))
 	}
 
-	for i, sequence := range GenerateFibonacciSequences(rng, count/2, dim) {
+	if sequenceSize >= uint8(len(FibonacciSequence)) {
+		return nil, fmt.Errorf("sequence size cannot exceed %d", len(FibonacciSequence))
+	}
+
+	sequences := make([]Sequence, sequencesCount)
+	maxStartIndex := len(FibonacciSequence) - int(sequenceSize)
+
+	for i := uint64(0); i < sequencesCount/2; i += 1 {
+		startIndex := uint8(rng.Intn(maxStartIndex))
+		sequence := FibonacciSequence[startIndex : startIndex+sequenceSize]
+		for i, value := range sequence {
+			sequence[i] = math.Log1p(value)
+		}
 		sequences[i] = Sequence{sequence, SequenceTypeFibonacci}
 	}
 
-	for i := count / 2; i < count; i += 1 {
-		var sequence []float64
+	for i := sequencesCount / 2; i < sequencesCount; i += 1 {
+		sequence := make([]float64, sequenceSize)
 		current := float64(rng.Intn(100))
-		for range dim {
-			sequence = append(sequence, float64(current))
-			current = sequence[len(sequence)-1] + float64(rng.Intn(100))
+		previous := float64(0)
+		for j := range sequenceSize {
+			sequence[j] = math.Log1p(current)
+			previous = current
+			current = previous + float64(rng.Intn(100))
 		}
 		sequences[i] = Sequence{sequence, SequenceTypeOther}
 	}
@@ -72,11 +60,30 @@ func GenerateFibonacciClassification(rng *rand.Rand, count uint64, dim uint64) [
 		sequences[i], sequences[j] = sequences[j], sequences[i]
 	})
 
-	return sequences
+	return sequences, nil
 }
 
-func Predict(input []float64, weights []float64, bias float64) (SequenceType, error) {
-	var result float64
+type BlackJackDecision uint8
+
+const (
+	BlackJackDecisionHit   BlackJackDecision = 1
+	BlackJackDecisionStand BlackJackDecision = 0
+)
+
+type BlackJackPair struct {
+	DealerHand uint8
+	PlayerHand uint8
+	Decision   BlackJackDecision
+}
+
+var BlackJackOptimalStrategy = [220]BlackJackDecision{}
+
+func GenerateBlackJackClassification(rng *rand.Rand, pairsCount uint64) {
+	panic("GenerateBlackJackClassification not implemented")
+}
+
+func PredictPerceptron(input []float64, weights []float64, bias float64) (SequenceType, error) {
+	result := float64(0)
 
 	if len(input) != len(weights) {
 		return SequenceType(3), fmt.Errorf("different dimensions input=%v and weights=%v", len(input), len(weights))
@@ -94,31 +101,43 @@ func Predict(input []float64, weights []float64, bias float64) (SequenceType, er
 	return SequenceTypeFibonacci, nil
 }
 
-func TrainFibonacciClassification(rng *rand.Rand, data []Sequence, iterations uint64, learningRate float64) ([]float64, float64, error) {
+func GenerateWeights(rng *rand.Rand, weightsCount uint64) []float64 {
 	if rng == nil {
 		rng = rand.New(rand.NewSource(42))
 	}
 
-	weights := make([]float64, len(data[0].Values))
-	bias := rng.Float64()
-
-	for i := range len(data[0].Values) {
-		weights[i] = rng.Float64()
+	weights := make([]float64, weightsCount)
+	for i := range weightsCount {
+		weights[i] = rng.Float64()*2 - 1
 	}
 
+	return weights
+}
+
+func TrainPerceptronFibonacciClassification(weights []float64, bias float64, data []Sequence, iterations uint64, learningRate float64) ([]float64, float64, error) {
 	for range iterations {
 		for _, sequence := range data {
-			predicted, err := Predict(sequence.Values, weights, bias)
+			predicted, err := PredictPerceptron(sequence.Values, weights, bias)
 			if err != nil {
 				return nil, 0, err
 			}
 
-			for i := range len(weights) {
-				error := float64(sequence.Type) - float64(predicted)
-				input := sequence.Values[i]
-				weights[i] = weights[i] + learningRate*error*input
-				bias = bias + learningRate*error
+			target := -1.0
+			if sequence.Type == SequenceTypeFibonacci {
+				target = 1.0
 			}
+
+			predictedValue := -1.0
+			if predicted == SequenceTypeFibonacci {
+				predictedValue = 1.0
+			}
+
+			error := target - predictedValue
+			for i := range len(weights) {
+				weights[i] = weights[i] + learningRate*error*sequence.Values[i]
+			}
+
+			bias = bias + learningRate*error
 		}
 	}
 
@@ -200,11 +219,11 @@ func F1(truePositives uint64, falsePositives uint64, falseNegatives uint64) floa
 	return float64(2*truePositives) / float64(bottom)
 }
 
-func EvaluateFibonacciClassification(data []Sequence, weights []float64, bias float64) (Metrics, error) {
+func EvaluatePerceptronFibonacciClassification(data []Sequence, weights []float64, bias float64) (Metrics, error) {
 	var true []SequenceType
 	var predicted []SequenceType
 	for i := range len(data) {
-		predictedType, err := Predict(data[i].Values, weights, bias)
+		predictedType, err := PredictPerceptron(data[i].Values, weights, bias)
 		if err != nil {
 			return Metrics{}, err
 		}
@@ -214,31 +233,58 @@ func EvaluateFibonacciClassification(data []Sequence, weights []float64, bias fl
 
 	matrix, err := NewConfusionMatrix(true, predicted)
 	if err != nil {
-		return Metrics{}, nil
+		return Metrics{}, err
 	}
 
 	return CalculateMetricsFromConfusionMatrix(matrix), nil
 }
 
 func main() {
-	var dataDim uint64 = 33
-
-	var trainDataCount uint64 = 20
-	rng := rand.New(rand.NewSource(250))
-
-	trainData := GenerateFibonacciClassification(rng, trainDataCount, dataDim)
-
-	weights, bias, err := TrainFibonacciClassification(rng, trainData, 50, 0.05)
-	if err != nil {
-		fmt.Printf("Error occured during training: %v", err)
+	cpuprofile := flag.String("cpuprofile", "", "write cpu profile to file")
+	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			panic(err)
+		}
+		if err := pprof.StartCPUProfile(f); err != nil {
+			panic(err)
+		}
+		defer pprof.StopCPUProfile()
 	}
 
-	var evaluationDataCount uint64 = 20
-	evaluationData := GenerateFibonacciClassification(rng, evaluationDataCount, dataDim)
+	dataDim := uint8(12)
+	trainDataCount := uint64(10)
+	iterations := uint64(10)
+	learningRate := 0.025
 
-	metrics, err := EvaluateFibonacciClassification(evaluationData, weights, bias)
+	rng := rand.New(rand.NewSource(42))
+
+	trainData, err := GenerateFibonacciClassification(rng, dataDim, trainDataCount)
 	if err != nil {
-		fmt.Printf("Error occured during evaluation: %v", err)
+		fmt.Printf("Error occured during generation: %v\n", err)
+		os.Exit(0)
+	}
+
+	weights := GenerateWeights(rng, uint64(dataDim+1))
+
+	outWeights, outBias, err := TrainPerceptronFibonacciClassification(weights[:dataDim], weights[dataDim], trainData, iterations, learningRate)
+	if err != nil {
+		fmt.Printf("Error occured during training: %v\n", err)
+		os.Exit(0)
+	}
+
+	evaluationDataCount := uint64(200)
+	evaluationData, err := GenerateFibonacciClassification(rng, dataDim, evaluationDataCount)
+	if err != nil {
+		fmt.Printf("Error occured during generation: %v\n", err)
+		os.Exit(0)
+	}
+
+	metrics, err := EvaluatePerceptronFibonacciClassification(evaluationData, outWeights, outBias)
+	if err != nil {
+		fmt.Printf("Error occured during evaluation: %v\n", err)
+		os.Exit(0)
 	}
 
 	PrintMetrics(metrics)
