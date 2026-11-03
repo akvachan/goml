@@ -6,7 +6,7 @@
 
 ## Algorithms
 
-- [ ] Perceptron
+- [x] Perceptron
 - [ ] Logistic Regression
 
 ## Misc
